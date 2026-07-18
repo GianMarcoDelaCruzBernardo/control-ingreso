@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reporte de Asistencia Â· Control de Ingreso</title>
+<title>Reporte de Asistencia - Control de Ingreso</title>
 <style>
   :root {
     --azul: #1F4E78;
@@ -114,11 +114,11 @@
 <body>
 <header>
   <div>
-    <h1>ðŸ“Š Reporte de Asistencia</h1>
+    <h1>&#128202; Reporte de Asistencia</h1>
     <p>{{ etiqueta }}</p>
   </div>
   <div class="header-links">
-    <a href="/admin/asistencia/registroasistencia/">â† Panel admin</a>
+    <a href="/admin/asistencia/registroasistencia/">&larr; Panel admin</a>
     <a href="/qr/">Ver QR</a>
   </div>
 </header>
@@ -146,7 +146,7 @@
   <div class="panel">
     <div class="panel-header">
       <h2>Detalle de registros</h2>
-      <a class="btn-excel" href="{% url 'exportar_reporte_excel' %}?periodo={{ periodo }}&fecha={{ fecha_base }}">â¬‡ Descargar Excel</a>
+      <a class="btn-excel" href="{% url 'exportar_reporte_excel' %}?periodo={{ periodo }}&fecha={{ fecha_base }}">&#8681; Descargar Excel</a>
     </div>
     {% if registros %}
     <table>
