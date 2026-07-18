@@ -86,3 +86,16 @@ DATABASES = {
 # ---------------- Deploy: CSRF trusted origins ----------------
 CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o]
 # ----------------------------------------------------------------
+# --------------------------------------------------------------------------
+# ---------------- Fix automatico: static files / whitenoise ----------------
+STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
