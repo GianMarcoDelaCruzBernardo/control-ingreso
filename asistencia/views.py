@@ -1,3 +1,4 @@
+﻿import datetime
 import io
 import math
 
@@ -10,6 +11,7 @@ from django.utils import timezone
 
 from .forms import RegistroForm
 from .models import RegistroAsistencia, Trabajador
+from .utils_excel import generar_reporte_excel
 
 
 def calcular_distancia_metros(lat1, lng1, lat2, lng2):
@@ -126,3 +128,73 @@ def qr_image(request):
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     return HttpResponse(buffer.getvalue(), content_type='image/png')
+
+
+def _rango_periodo(periodo, fecha_str):
+    """Calcula (inicio, fin, etiqueta, fecha_base) segun 'dia' | 'semana' | 'mes'."""
+    hoy = timezone.localdate()
+    if fecha_str:
+        try:
+            fecha_base = datetime.datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_base = hoy
+    else:
+        fecha_base = hoy
+
+    if periodo == 'semana':
+        inicio = fecha_base - datetime.timedelta(days=fecha_base.weekday())
+        fin = inicio + datetime.timedelta(days=6)
+        etiqueta = f"Semana del {inicio.strftime('%d/%m/%Y')} al {fin.strftime('%d/%m/%Y')}"
+    elif periodo == 'mes':
+        inicio = fecha_base.replace(day=1)
+        if inicio.month == 12:
+            fin = inicio.replace(year=inicio.year + 1, month=1, day=1) - datetime.timedelta(days=1)
+        else:
+            fin = inicio.replace(month=inicio.month + 1, day=1) - datetime.timedelta(days=1)
+        etiqueta = f"Mes de {inicio.strftime('%B %Y')}"
+    else:
+        periodo = 'dia'
+        inicio = fin = fecha_base
+        etiqueta = f"Dia {fecha_base.strftime('%d/%m/%Y')}"
+
+    return inicio, fin, etiqueta, fecha_base
+
+
+@staff_member_required
+def reporte_asistencia(request):
+    periodo = request.GET.get('periodo', 'dia')
+    fecha_str = request.GET.get('fecha')
+    inicio, fin, etiqueta, fecha_base = _rango_periodo(periodo, fecha_str)
+
+    registros = RegistroAsistencia.objects.select_related('trabajador').filter(
+        fecha__gte=inicio, fecha__lte=fin
+    ).order_by('-fecha', 'trabajador__apellidos')
+
+    total = registros.count()
+    en_curso = registros.filter(hora_salida__isnull=True, hora_entrada__isnull=False).count()
+    completados = registros.filter(hora_salida__isnull=False).count()
+    trabajadores_unicos = registros.values('trabajador').distinct().count()
+
+    contexto = {
+        'registros': registros,
+        'periodo': periodo,
+        'fecha_base': fecha_base.strftime('%Y-%m-%d'),
+        'etiqueta': etiqueta,
+        'total': total,
+        'en_curso': en_curso,
+        'completados': completados,
+        'trabajadores_unicos': trabajadores_unicos,
+    }
+    return render(request, 'asistencia/reporte.html', contexto)
+
+
+@staff_member_required
+def exportar_reporte_excel(request):
+    periodo = request.GET.get('periodo', 'dia')
+    fecha_str = request.GET.get('fecha')
+    inicio, fin, etiqueta, _ = _rango_periodo(periodo, fecha_str)
+
+    registros = RegistroAsistencia.objects.select_related('trabajador').filter(
+        fecha__gte=inicio, fecha__lte=fin
+    )
+    return generar_reporte_excel(registros, etiqueta, filename_prefix=f"control_ingreso_{periodo}")
