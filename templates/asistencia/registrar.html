@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Registro de Ingreso/Salida{% endblock %}
+{% block content %}
+    <h1>Control de Ingreso</h1>
+
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <p class="status-msg" id="geo-status">Obteniendo tu ubicacion...</p>
+
+    <form method="post" id="registro-form">
+        {% csrf_token %}
+        <label for="id_nombres">Nombres</label>
+        {{ form.nombres }}
+        <label for="id_apellidos">Apellidos</label>
+        {{ form.apellidos }}
+        <label for="id_dni">DNI (opcional)</label>
+        {{ form.dni }}
+        <input type="hidden" name="lat" id="id_lat">
+        <input type="hidden" name="lng" id="id_lng">
+        <button type="submit" id="submit-btn" disabled>Obteniendo ubicacion...</button>
+    </form>
+
+    <script>
+        var status = document.getElementById('geo-status');
+        var btn = document.getElementById('submit-btn');
+        var latInput = document.getElementById('id_lat');
+        var lngInput = document.getElementById('id_lng');
+
+        if (!navigator.geolocation) {
+            status.textContent = 'Tu dispositivo no soporta geolocalizacion.';
+        } else {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    latInput.value = pos.coords.latitude;
+                    lngInput.value = pos.coords.longitude;
+                    status.textContent = 'Ubicacion obtenida correctamente.';
+                    btn.disabled = false;
+                    btn.textContent = 'Registrar';
+                },
+                function (err) {
+                    status.textContent = 'No se pudo obtener tu ubicacion. Activa el GPS y recarga la pagina.';
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+    </script>
+{% endblock %}

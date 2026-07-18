@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Control de Ingreso</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 40px; }
+        img { border: 4px solid #1F4E78; padding: 10px; }
+        h1 { color: #1F4E78; }
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body>
+    <h1>Escanea para registrar tu ingreso/salida</h1>
+    <img src="{% url 'qr_image' %}" alt="QR Control de Ingreso" width="350">
+    <p class="no-print">Imprime esta pagina y pegala en la puerta de ingreso.</p>
+</body>
+</html>
