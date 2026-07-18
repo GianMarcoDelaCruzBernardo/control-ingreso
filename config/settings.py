@@ -100,3 +100,9 @@ STORAGES = {
     },
 }
 
+
+# --------------------------------------------------------------------------
+# ---------------- Ubicacion del establecimiento (control de ingreso) ------
+COMPANY_LATITUDE = float(os.environ.get('COMPANY_LATITUDE', '-8.98445'))
+COMPANY_LONGITUDE = float(os.environ.get('COMPANY_LONGITUDE', '-78.60684'))
+ALLOWED_RADIUS_METERS = float(os.environ.get('ALLOWED_RADIUS_METERS', '50'))
