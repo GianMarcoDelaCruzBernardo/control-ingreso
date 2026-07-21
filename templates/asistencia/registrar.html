@@ -7,7 +7,7 @@
         <div class="error">{{ error }}</div>
     {% endif %}
 
-    <p class="status-msg" id="geo-status">Obteniendo tu ubicacion...</p>
+    <p class="status-msg" id="geo-status">Verificando permisos de ubicacion...</p>
 
     <form method="post" id="registro-form">
         {% csrf_token %}
@@ -22,28 +22,136 @@
         <button type="submit" id="submit-btn" disabled>Obteniendo ubicacion...</button>
     </form>
 
-    <script>
-        var status = document.getElementById('geo-status');
-        var btn = document.getElementById('submit-btn');
-        var latInput = document.getElementById('id_lat');
-        var lngInput = document.getElementById('id_lng');
+    <div id="geo-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:16px; padding:28px 24px; max-width:360px; width:100%; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div style="font-size:40px; margin-bottom:10px;">ðŸ“</div>
+            <h2 style="color:#1F4E78; font-size:18px; margin-bottom:10px;">Necesitamos tu ubicacion</h2>
+            <p id="geo-overlay-msg" style="font-size:14px; color:#444; margin-bottom:18px; line-height:1.4;">
+                Para registrar tu ingreso o salida necesitamos confirmar que estas dentro del area permitida. Presiona el boton y acepta el permiso de ubicacion cuando tu navegador lo solicite.
+            </p>
+            <button type="button" id="geo-overlay-btn" style="width:100%; padding:14px; background:#1F4E78; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer;">
+                Permitir ubicacion
+            </button>
+        </div>
+    </div>
 
-        if (!navigator.geolocation) {
-            status.textContent = 'Tu dispositivo no soporta geolocalizacion.';
-        } else {
-            navigator.geolocation.getCurrentPosition(
-                function (pos) {
-                    latInput.value = pos.coords.latitude;
-                    lngInput.value = pos.coords.longitude;
-                    status.textContent = 'Ubicacion obtenida correctamente.';
-                    btn.disabled = false;
-                    btn.textContent = 'Registrar';
-                },
-                function (err) {
-                    status.textContent = 'No se pudo obtener tu ubicacion. Activa el GPS y recarga la pagina.';
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
+    <script>
+        (function () {
+            var status = document.getElementById('geo-status');
+            var btn = document.getElementById('submit-btn');
+            var latInput = document.getElementById('id_lat');
+            var lngInput = document.getElementById('id_lng');
+            var overlay = document.getElementById('geo-overlay');
+            var overlayMsg = document.getElementById('geo-overlay-msg');
+            var overlayBtn = document.getElementById('geo-overlay-btn');
+
+            var intentos = 0;
+
+            function mostrarOverlay(mensaje, textoBoton) {
+                overlayMsg.textContent = mensaje;
+                overlayBtn.textContent = textoBoton || 'Permitir ubicacion';
+                overlay.style.display = 'flex';
+            }
+
+            function ocultarOverlay() {
+                overlay.style.display = 'none';
+            }
+
+            function exito(pos) {
+                latInput.value = pos.coords.latitude;
+                lngInput.value = pos.coords.longitude;
+                status.textContent = 'Ubicacion obtenida correctamente.';
+                btn.disabled = false;
+                btn.textContent = 'Registrar';
+                ocultarOverlay();
+            }
+
+            function fallo(err) {
+                intentos += 1;
+
+                // Codigo 1 = permiso denegado por el usuario o el navegador
+                if (err.code === 1) {
+                    status.textContent = 'Permiso de ubicacion denegado.';
+                    mostrarOverlay(
+                        'Bloqueaste el permiso de ubicacion. Abre los ajustes del sitio en tu navegador, activa "Ubicacion" y vuelve a intentar.',
+                        'Reintentar'
+                    );
+                    return;
+                }
+
+                // Primer intento fallido (timeout o posicion no disponible):
+                // reintenta automaticamente con precision baja / red
+                if (intentos === 1) {
+                    status.textContent = 'Buscando tu ubicacion, esto puede tardar unos segundos...';
+                    navigator.geolocation.getCurrentPosition(exito, fallo, {
+                        enableHighAccuracy: false,
+                        timeout: 15000,
+                        maximumAge: 60000
+                    });
+                    return;
+                }
+
+                // Ya reintento con precision baja y sigue sin poder
+                status.textContent = 'No se pudo obtener tu ubicacion.';
+                mostrarOverlay(
+                    'No pudimos calcular tu ubicacion. Verifica que el GPS/ubicacion de tu telefono este activado y que le hayas dado permiso a este navegador, luego presiona reintentar.',
+                    'Reintentar'
+                );
+            }
+
+            function solicitarUbicacion() {
+                if (!navigator.geolocation) {
+                    status.textContent = 'Tu dispositivo no soporta geolocalizacion.';
+                    return;
+                }
+                intentos = 0;
+                status.textContent = 'Obteniendo tu ubicacion...';
+                navigator.geolocation.getCurrentPosition(exito, fallo, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 0
+                });
+            }
+
+            overlayBtn.addEventListener('click', solicitarUbicacion);
+
+            if (!navigator.geolocation) {
+                status.textContent = 'Tu dispositivo no soporta geolocalizacion.';
+            } else if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'geolocation' }).then(function (result) {
+                    if (result.state === 'granted') {
+                        solicitarUbicacion();
+                    } else if (result.state === 'denied') {
+                        status.textContent = 'Permiso de ubicacion denegado.';
+                        mostrarOverlay(
+                            'Bloqueaste el permiso de ubicacion. Abre los ajustes del sitio en tu navegador, activa "Ubicacion" y vuelve a intentar.',
+                            'Reintentar'
+                        );
+                    } else {
+                        mostrarOverlay(
+                            'Para registrar tu ingreso o salida necesitamos confirmar que estas dentro del area permitida. Presiona el boton y acepta el permiso cuando tu navegador lo solicite.',
+                            'Permitir ubicacion'
+                        );
+                    }
+
+                    result.onchange = function () {
+                        if (this.state === 'granted') {
+                            solicitarUbicacion();
+                        }
+                    };
+                }).catch(function () {
+                    mostrarOverlay(
+                        'Para registrar tu ingreso o salida necesitamos confirmar que estas dentro del area permitida. Presiona el boton y acepta el permiso cuando tu navegador lo solicite.',
+                        'Permitir ubicacion'
+                    );
+                });
+            } else {
+                // Navegadores sin Permissions API (Safari/iOS antiguo): pedir directo
+                mostrarOverlay(
+                    'Para registrar tu ingreso o salida necesitamos confirmar que estas dentro del area permitida. Presiona el boton y acepta el permiso cuando tu navegador lo solicite.',
+                    'Permitir ubicacion'
+                );
+            }
+        })();
     </script>
 {% endblock %}
