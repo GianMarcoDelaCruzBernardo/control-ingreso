@@ -1,11 +1,11 @@
-﻿import datetime
+import datetime
 import io
 import math
 
 import qrcode
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 
@@ -23,6 +23,36 @@ def calcular_distancia_metros(lat1, lng1, lat2, lng2):
     dlambda = math.radians(lng2 - lng1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     return 2 * radio_tierra * math.asin(math.sqrt(a))
+
+
+def _registro_abierto_hoy(trabajador):
+    """Devuelve el registro de hoy que tiene ingreso pero no salida, si existe."""
+    hoy = timezone.localdate()
+    return RegistroAsistencia.objects.filter(
+        trabajador=trabajador, fecha=hoy,
+        hora_entrada__isnull=False, hora_salida__isnull=True
+    ).first()
+
+
+def buscar_trabajador(request, dni):
+    """Endpoint AJAX: dado un DNI, devuelve nombres/apellidos guardados y si le toca
+    marcar ENTRADA o SALIDA hoy. Permite autocompletar el formulario."""
+    dni = (dni or '').strip()
+
+    if not dni.isdigit() or not (8 <= len(dni) <= 15):
+        return JsonResponse({'error': 'DNI invalido.'}, status=400)
+
+    trabajador = Trabajador.objects.filter(dni=dni).first()
+    if not trabajador:
+        return JsonResponse({'encontrado': False})
+
+    accion = 'salida' if _registro_abierto_hoy(trabajador) else 'entrada'
+    return JsonResponse({
+        'encontrado': True,
+        'nombres': trabajador.nombres,
+        'apellidos': trabajador.apellidos,
+        'accion': accion,
+    })
 
 
 def registrar(request):
@@ -62,26 +92,24 @@ def registrar(request):
             return render(request, 'asistencia/registrar.html', contexto)
 
         if form.is_valid():
+            dni = form.cleaned_data['dni'].strip()
             nombres = form.cleaned_data['nombres'].strip().title()
             apellidos = form.cleaned_data['apellidos'].strip().title()
-            dni = (form.cleaned_data.get('dni') or '').strip()
 
-            trabajador, _creado = Trabajador.objects.get_or_create(
-                nombres__iexact=nombres,
-                apellidos__iexact=apellidos,
-                defaults={'nombres': nombres, 'apellidos': apellidos, 'dni': dni or None}
+            trabajador, creado = Trabajador.objects.get_or_create(
+                dni=dni,
+                defaults={'nombres': nombres, 'apellidos': apellidos}
             )
-            if dni and not trabajador.dni:
-                trabajador.dni = dni
-                trabajador.save(update_fields=['dni'])
+            if not creado and (trabajador.nombres != nombres or trabajador.apellidos != apellidos):
+                # El trabajador ya existia con ese DNI pero corrigio su nombre: actualizamos.
+                trabajador.nombres = nombres
+                trabajador.apellidos = apellidos
+                trabajador.save(update_fields=['nombres', 'apellidos'])
 
             hoy = timezone.localdate()
             ahora = timezone.now()
 
-            registro_abierto = RegistroAsistencia.objects.filter(
-                trabajador=trabajador, fecha=hoy,
-                hora_entrada__isnull=False, hora_salida__isnull=True
-            ).first()
+            registro_abierto = _registro_abierto_hoy(trabajador)
 
             if registro_abierto:
                 registro_abierto.hora_salida = ahora

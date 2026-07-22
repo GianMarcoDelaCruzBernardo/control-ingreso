@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Registro de Ingreso/Salida{% endblock %}
 {% block content %}
     <h1>Control de Ingreso</h1>
@@ -8,15 +9,16 @@
     {% endif %}
 
     <p class="status-msg" id="geo-status">Verificando permisos de ubicacion...</p>
+    <p class="status-msg" id="dni-status" style="display:none;"></p>
 
     <form method="post" id="registro-form">
         {% csrf_token %}
+        <label for="id_dni">DNI</label>
+        {{ form.dni }}
         <label for="id_nombres">Nombres</label>
         {{ form.nombres }}
         <label for="id_apellidos">Apellidos</label>
         {{ form.apellidos }}
-        <label for="id_dni">DNI (opcional)</label>
-        {{ form.dni }}
         <input type="hidden" name="lat" id="id_lat">
         <input type="hidden" name="lng" id="id_lng">
         <button type="submit" id="submit-btn" disabled>Obteniendo ubicacion...</button>
@@ -24,7 +26,7 @@
 
     <div id="geo-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; padding:20px;">
         <div style="background:#fff; border-radius:16px; padding:28px 24px; max-width:360px; width:100%; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
-            <div style="font-size:40px; margin-bottom:10px;">ðŸ“</div>
+            <img src="{% static 'asistencia/img/logo.png' %}" alt="Logo empresa" style="max-width:90px; margin-bottom:12px;">
             <h2 style="color:#1F4E78; font-size:18px; margin-bottom:10px;">Necesitamos tu ubicacion</h2>
             <p id="geo-overlay-msg" style="font-size:14px; color:#444; margin-bottom:18px; line-height:1.4;">
                 Para registrar tu ingreso o salida necesitamos confirmar que estas dentro del area permitida. Presiona el boton y acepta el permiso de ubicacion cuando tu navegador lo solicite.
@@ -44,8 +46,26 @@
             var overlay = document.getElementById('geo-overlay');
             var overlayMsg = document.getElementById('geo-overlay-msg');
             var overlayBtn = document.getElementById('geo-overlay-btn');
+            var dniInput = document.getElementById('id_dni');
+            var nombresInput = document.getElementById('id_nombres');
+            var apellidosInput = document.getElementById('id_apellidos');
+            var dniStatus = document.getElementById('dni-status');
 
             var intentos = 0;
+            var geoListo = false;
+            var accionActual = 'entrada';
+            var timerBusqueda = null;
+            var STORAGE_KEY = 'control_ingreso_ultimo_dni';
+
+            function actualizarBoton() {
+                if (geoListo) {
+                    btn.disabled = false;
+                    btn.textContent = accionActual === 'salida' ? 'Marcar Salida' : 'Marcar Ingreso';
+                } else {
+                    btn.disabled = true;
+                    btn.textContent = 'Obteniendo ubicacion...';
+                }
+            }
 
             function mostrarOverlay(mensaje, textoBoton) {
                 overlayMsg.textContent = mensaje;
@@ -61,8 +81,8 @@
                 latInput.value = pos.coords.latitude;
                 lngInput.value = pos.coords.longitude;
                 status.textContent = 'Ubicacion obtenida correctamente.';
-                btn.disabled = false;
-                btn.textContent = 'Registrar';
+                geoListo = true;
+                actualizarBoton();
                 ocultarOverlay();
             }
 
@@ -152,6 +172,59 @@
                     'Permitir ubicacion'
                 );
             }
+
+            // ---- Autocompletado por DNI: evita re-escribir nombres/apellidos cada dia ----
+            function buscarPorDni(dni) {
+                dniStatus.style.display = 'block';
+                dniStatus.style.color = '#888';
+                dniStatus.textContent = 'Buscando datos...';
+
+                fetch('/buscar-dni/' + encodeURIComponent(dni) + '/')
+                    .then(function (resp) { return resp.json(); })
+                    .then(function (data) {
+                        if (data.encontrado) {
+                            nombresInput.value = data.nombres;
+                            apellidosInput.value = data.apellidos;
+                            accionActual = data.accion;
+                            dniStatus.style.color = '#1e7d34';
+                            dniStatus.textContent = 'Trabajador reconocido: se marcara ' +
+                                (accionActual === 'salida' ? 'SALIDA' : 'INGRESO') + '.';
+                        } else {
+                            accionActual = 'entrada';
+                            dniStatus.style.color = '#888';
+                            dniStatus.textContent = 'DNI nuevo. Completa tus nombres y apellidos.';
+                        }
+                        actualizarBoton();
+                    })
+                    .catch(function () {
+                        dniStatus.style.display = 'none';
+                    });
+            }
+
+            dniInput.addEventListener('input', function () {
+                var dni = dniInput.value.trim();
+                clearTimeout(timerBusqueda);
+                if (dni.length >= 8) {
+                    timerBusqueda = setTimeout(function () { buscarPorDni(dni); }, 400);
+                } else {
+                    dniStatus.style.display = 'none';
+                }
+            });
+
+            // Recuerda el ultimo DNI usado en este dispositivo para agilizar el siguiente registro
+            var ultimoDni = window.localStorage.getItem(STORAGE_KEY);
+            if (ultimoDni) {
+                dniInput.value = ultimoDni;
+                if (ultimoDni.length >= 8) {
+                    buscarPorDni(ultimoDni);
+                }
+            }
+
+            document.getElementById('registro-form').addEventListener('submit', function () {
+                window.localStorage.setItem(STORAGE_KEY, dniInput.value.trim());
+            });
+
+            actualizarBoton();
         })();
     </script>
 {% endblock %}

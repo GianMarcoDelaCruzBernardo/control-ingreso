@@ -1,11 +1,25 @@
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
+validar_dni = RegexValidator(
+    regex=r'^\d{8,15}$',
+    message='El documento debe contener solo numeros (8 a 15 digitos).'
+)
+
 
 class Trabajador(models.Model):
+    dni = models.CharField(
+        max_length=15,
+        unique=True,
+        db_index=True,
+        null=True,
+        blank=True,
+        validators=[validar_dni],
+        help_text='Documento de identidad. Se usa para reconocer al trabajador en su siguiente registro.'
+    )
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
-    dni = models.CharField(max_length=15, blank=True, null=True)
     activo = models.BooleanField(default=True)
     creado = models.DateTimeField(auto_now_add=True)
 
